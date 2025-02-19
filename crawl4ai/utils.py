@@ -26,7 +26,7 @@ import asyncio
 import sqlite3
 import hashlib
 from urllib.parse import urljoin, urlparse
-from urllib.robotparser import RobotFileParser
+from protego import Protego
 import aiohttp
 
 class RobotsParser:
@@ -135,14 +135,9 @@ class RobotsParser:
             return True
 
         # Create parser for this check
-        parser = RobotFileParser() 
-        parser.parse(rules.splitlines())
-        
-        # If parser can't read rules, allow access
-        if not parser.mtime():
-            return True
+        parser = Protego.parse(rules)
             
-        return parser.can_fetch(user_agent, url)
+        return parser.can_fetch(url, user_agent)
 
     def clear_cache(self):
         """Clear all cached robots.txt entries"""
@@ -155,6 +150,16 @@ class RobotsParser:
             expire_time = int(time.time()) - self.cache_ttl
             conn.execute("DELETE FROM robots_cache WHERE fetch_time < ?", (expire_time,))
       
+    def close(self):
+        """Close any open database connections"""
+        # Force close any open WAL files by running VACUUM
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                conn.execute("VACUUM")
+        except sqlite3.Error:
+            pass
+
 
 class InvalidCSSSelectorError(Exception):
     pass
